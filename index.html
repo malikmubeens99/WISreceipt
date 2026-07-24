@@ -24,6 +24,36 @@
             from { transform: translate(-50%, 0); opacity: 1; }
             to { transform: translate(-50%, -30px); opacity: 0; }
         }
+
+        /* PRINT STYLESHEET - 5 RECEIPTS PER PAGE */
+        @media print {
+            body * { visibility: hidden; }
+            #printContainer, #printContainer * { visibility: visible; }
+            #printContainer {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white;
+                padding: 0;
+                margin: 0;
+            }
+            @page {
+                size: A4 portrait;
+                margin: 8mm 10mm;
+            }
+            .print-receipt-card {
+                page-break-inside: avoid;
+                break-inside: avoid;
+                height: 52mm;
+                box-sizing: border-box;
+                border: 1.5px solid #0e7490;
+                border-radius: 8px;
+                padding: 8px 12px;
+                margin-bottom: 6mm;
+                background: #fff;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-4 md:p-6 text-gray-800 relative">
@@ -92,7 +122,7 @@
                         <input type="text" id="inputCategory" placeholder="e.g. Donation for Wafaq Qurbani" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-600 text-sm">
                     </div>
 
-                    <!-- DONATION SOURCE SELECTION (SAVES IN DB, NOT VISIBLE ON RECEIPT IMAGE) -->
+                    <!-- DONATION SOURCE SELECTION -->
                     <div class="bg-cyan-50/60 p-3 rounded-xl border border-cyan-100 space-y-1.5">
                         <span class="block text-xs font-bold text-cyan-900">Donation Received Via (Internal Tracker):</span>
                         <div class="flex gap-4 items-center">
@@ -185,9 +215,14 @@
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div class="px-5 py-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-3 bg-gray-50/50">
                     <h3 class="text-sm font-bold text-gray-800">📋 Cloud Shared Database Logs</h3>
-                    <button id="clearAllDataBtn" class="text-xs text-red-500 hover:text-red-700 transition font-medium cursor-pointer">⚠️ Clear All History</button>
+                    <div class="flex items-center gap-2">
+                        <button id="printMonthlyPdfBtn" class="bg-cyan-800 hover:bg-cyan-900 text-white text-xs font-bold px-3 py-2 rounded-lg transition flex items-center gap-1 cursor-pointer">
+                            🖨️ Print / Save PDF (5 Slips / Page)
+                        </button>
+                        <button id="clearAllDataBtn" class="text-xs text-red-500 hover:text-red-700 transition font-medium cursor-pointer ml-2">⚠️ Clear All History</button>
+                    </div>
                 </div>
                 <div class="divide-y divide-gray-100 max-h-[500px] overflow-y-auto" id="recordsTableContainer"></div>
             </div>
@@ -232,6 +267,9 @@
         </div>
     </div>
 
+    <!-- HIDDEN PRINT CONTAINER FOR PDF GENERATION -->
+    <div id="printContainer" class="hidden"></div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
         import { getDatabase, ref, push, onValue, set, remove } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
@@ -259,6 +297,7 @@
         const bgImage = new Image();
 
         let dbRecords = [];
+        let currentFilteredRecords = [];
         let activeTab = 'create';
         let formattedTodayDate = "";
         let currentlySelectedModalRecord = null;
@@ -294,7 +333,7 @@
                 }
                 updateSerialEngineUI();
                 if(activeTab === 'records') {
-                    applyCurrentMonthFilter(); // DEFAULT SHOW CURRENT MONTH
+                    applyCurrentMonthFilter();
                 } else {
                     drawReceipt();
                 }
@@ -315,7 +354,7 @@
             document.getElementById('autoSrDisplay').innerText = calculatedNext;
         }
 
-        // DRAW RECEIPT ON CANVAS - EXCLUDES INTERNAL TRACKER DATA LIKE 'DONATION SOURCE'
+        // DRAW RECEIPT ON CANVAS - DATE Y-POSITION FIXED AT H * 0.125
         function drawReceiptOnCanvas(targetCanvas, targetCtx, dataObject) {
             const targetW = bgImage.naturalWidth || 1000;
             const targetH = bgImage.naturalHeight || 450;
@@ -345,7 +384,8 @@
             const fontBase = Math.round(H * 0.038); 
             targetCtx.font = `bold ${fontBase}px "Courier Prime", monospace`;
 
-            targetCtx.fillText(dataObject.date, W * 0.485, H * 0.147);
+            // DATE POSITION MOVED UP TO 0.125
+            targetCtx.fillText(dataObject.date, W * 0.485, H * 0.125);
             targetCtx.fillText(dataObject.srNum, W * 0.485, H * 0.245);
 
             targetCtx.font = `bold ${Math.round(H * 0.045)}px "Courier Prime", sans-serif`;
@@ -421,7 +461,7 @@
                 contact: document.getElementById('inputContact').value,
                 category: document.getElementById('inputCategory').value,
                 payMode: document.querySelector('input[name="payMode"]:checked').value,
-                donationSource: document.querySelector('input[name="donationSource"]:checked').value, // SAVED TO FIREBASE ONLY
+                donationSource: document.querySelector('input[name="donationSource"]:checked').value,
                 date: formattedTodayDate,
                 timestamp: new Date().getTime()
             };
@@ -446,6 +486,8 @@
 
         function renderRecordsView(filteredArray = null) {
             let workingDataset = filteredArray !== null ? filteredArray : [...dbRecords];
+            currentFilteredRecords = workingDataset;
+            
             const tableContainer = document.getElementById('recordsTableContainer');
             const sortVal = document.getElementById('filterSortBy').value;
             
@@ -509,8 +551,6 @@
                 document.getElementById('tabCreateBtn').className = "flex-1 py-3 px-4 rounded-xl font-semibold text-sm transition bg-transparent text-gray-600 hover:bg-gray-100 cursor-pointer text-center";
                 document.getElementById('viewCreate').classList.add('hidden');
                 document.getElementById('viewRecords').classList.remove('hidden');
-                
-                // DEFAULT SHOW CURRENT MONTH
                 applyCurrentMonthFilter();
             }
         }
@@ -535,7 +575,6 @@
             renderRecordsView(filtered);
         }
 
-        // DEFAULT / CURRENT MONTH FILTER ENGINE
         window.applyCurrentMonthFilter = function() {
             const refDate = new Date();
             const firstDay = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
@@ -553,6 +592,66 @@
             document.getElementById('filterSource').value = "all";
             renderRecordsView();
         }
+
+        // PRINT / SAVE PDF ENGINE (5 RECEIPTS PER A4 PAGE)
+        document.getElementById('printMonthlyPdfBtn').addEventListener('click', () => {
+            if (currentFilteredRecords.length === 0) {
+                alert('⚠️ Print karne ke liye koi records maujood nahi hain!');
+                return;
+            }
+
+            const printContainer = document.getElementById('printContainer');
+            const totalAmount = currentFilteredRecords.reduce((acc, curr) => acc + curr.amount, 0);
+
+            let printHtml = `
+                <div style="text-align: center; border-bottom: 2px solid #0e7490; padding-bottom: 8px; margin-bottom: 12px;">
+                    <h1 style="margin: 0; font-size: 18px; color: #0e7490; font-weight: bold;">WISDOM HOPE FOUNDATION</h1>
+                    <p style="margin: 2px 0 0 0; font-size: 12px; color: #475569;">
+                        Donation Receipts Report | Total Receipts: <b>${currentFilteredRecords.length}</b> | Total Raised: <b>PKR ${totalAmount.toLocaleString()}/-</b>
+                    </p>
+                </div>
+            `;
+
+            currentFilteredRecords.forEach((rec) => {
+                printHtml += `
+                    <div class="print-receipt-card" style="margin-bottom: 5mm;">
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 6px;">
+                            <span style="font-weight: bold; color: #0e7490; font-size: 12px;">Receipt Sr #: ${rec.srNum}</span>
+                            <span style="font-size: 11px; color: #475569;">
+                                Date: <b>${rec.date}</b> | Mode: <b>${rec.payMode}</b> | <b>${rec.donationSource === 'Ads' ? '📢 Ads' : '👤 Personal'}</b>
+                            </span>
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 11px; color: #1e293b;">
+                            <tr>
+                                <td style="width: 15%; color: #64748b; padding: 2px 0;">Donor:</td>
+                                <td style="font-weight: bold; font-size: 12px; padding: 2px 0;">${rec.name}</td>
+                                <td style="text-align: right; font-weight: bold; font-size: 14px; color: #059669; width: 30%;" rowspan="3">
+                                    PKR ${rec.amount.toLocaleString()}/-
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; padding: 2px 0;">Address / Ph:</td>
+                                <td style="padding: 2px 0;">${rec.address || 'N/A'} ${rec.contact ? '| ' + rec.contact : ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: #64748b; padding: 2px 0;">Purpose:</td>
+                                <td style="padding: 2px 0;">${rec.category || 'General Donation'}</td>
+                            </tr>
+                        </table>
+                    </div>
+                `;
+            });
+
+            printContainer.innerHTML = printHtml;
+            printContainer.classList.remove('hidden');
+
+            window.print();
+
+            setTimeout(() => {
+                printContainer.classList.add('hidden');
+                printContainer.innerHTML = "";
+            }, 500);
+        });
 
         function openDetailsModal(id) {
             const targetRecord = dbRecords.find(r => r.id === id);
