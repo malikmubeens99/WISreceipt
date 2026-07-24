@@ -25,7 +25,7 @@
             to { transform: translate(-50%, -30px); opacity: 0; }
         }
 
-        /* PRINT STYLESHEET - 5 RECEIPTS PER PAGE */
+        /* PRINT STYLESHEET - ACTUAL GRAPHIC RECEIPTS PRINT LAYOUT */
         @media print {
             body * { visibility: hidden; }
             #printContainer, #printContainer * { visibility: visible; }
@@ -40,18 +40,20 @@
             }
             @page {
                 size: A4 portrait;
-                margin: 8mm 10mm;
+                margin: 8mm;
             }
-            .print-receipt-card {
+            .graphic-receipt-item {
                 page-break-inside: avoid;
                 break-inside: avoid;
-                height: 52mm;
-                box-sizing: border-box;
-                border: 1.5px solid #0e7490;
+                text-align: center;
+                margin-bottom: 5mm;
+            }
+            .graphic-receipt-item img {
+                width: 100%;
+                max-height: 82mm;
+                object-fit: contain;
+                border: 1px solid #e2e8f0;
                 border-radius: 8px;
-                padding: 8px 12px;
-                margin-bottom: 6mm;
-                background: #fff;
             }
         }
     </style>
@@ -219,7 +221,7 @@
                     <h3 class="text-sm font-bold text-gray-800">📋 Cloud Shared Database Logs</h3>
                     <div class="flex items-center gap-2">
                         <button id="printMonthlyPdfBtn" class="bg-cyan-800 hover:bg-cyan-900 text-white text-xs font-bold px-3 py-2 rounded-lg transition flex items-center gap-1 cursor-pointer">
-                            🖨️ Print / Save PDF (5 Slips / Page)
+                            🖨️ Print / Save PDF (Graphic Receipts)
                         </button>
                         <button id="clearAllDataBtn" class="text-xs text-red-500 hover:text-red-700 transition font-medium cursor-pointer ml-2">⚠️ Clear All History</button>
                     </div>
@@ -267,7 +269,7 @@
         </div>
     </div>
 
-    <!-- HIDDEN PRINT CONTAINER FOR PDF GENERATION -->
+    <!-- HIDDEN PRINT CONTAINER FOR GRAPHIC PRINT -->
     <div id="printContainer" class="hidden"></div>
 
     <script type="module">
@@ -354,7 +356,7 @@
             document.getElementById('autoSrDisplay').innerText = calculatedNext;
         }
 
-        // DRAW RECEIPT ON CANVAS - DATE Y-POSITION FIXED AT H * 0.125
+        // DRAW RECEIPT ON CANVAS - DATE Y-POSITION UPDATED TO H * 0.125
         function drawReceiptOnCanvas(targetCanvas, targetCtx, dataObject) {
             const targetW = bgImage.naturalWidth || 1000;
             const targetH = bgImage.naturalHeight || 450;
@@ -384,7 +386,7 @@
             const fontBase = Math.round(H * 0.038); 
             targetCtx.font = `bold ${fontBase}px "Courier Prime", monospace`;
 
-            // DATE POSITION MOVED UP TO 0.125
+            // DATE ALIGNED ABOVE LINE
             targetCtx.fillText(dataObject.date, W * 0.485, H * 0.125);
             targetCtx.fillText(dataObject.srNum, W * 0.485, H * 0.245);
 
@@ -593,63 +595,51 @@
             renderRecordsView();
         }
 
-        // PRINT / SAVE PDF ENGINE (5 RECEIPTS PER A4 PAGE)
-        document.getElementById('printMonthlyPdfBtn').addEventListener('click', () => {
+        // REAL GRAPHIC IMAGE-BASED PRINT ENGINE
+        document.getElementById('printMonthlyPdfBtn').addEventListener('click', async () => {
             if (currentFilteredRecords.length === 0) {
                 alert('⚠️ Print karne ke liye koi records maujood nahi hain!');
                 return;
             }
 
             const printContainer = document.getElementById('printContainer');
-            const totalAmount = currentFilteredRecords.reduce((acc, curr) => acc + curr.amount, 0);
+            printContainer.innerHTML = `
+                <div style="text-align: center; padding: 10px; font-family: sans-serif; font-size: 14px; font-weight: bold; color: #0e7490;">
+                    ⏳ Generating Actual Graphic Receipts for Printing...
+                </div>
+            `;
+            printContainer.classList.remove('hidden');
+
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
 
             let printHtml = `
-                <div style="text-align: center; border-bottom: 2px solid #0e7490; padding-bottom: 8px; margin-bottom: 12px;">
-                    <h1 style="margin: 0; font-size: 18px; color: #0e7490; font-weight: bold;">WISDOM HOPE FOUNDATION</h1>
-                    <p style="margin: 2px 0 0 0; font-size: 12px; color: #475569;">
-                        Donation Receipts Report | Total Receipts: <b>${currentFilteredRecords.length}</b> | Total Raised: <b>PKR ${totalAmount.toLocaleString()}/-</b>
+                <div style="text-align: center; border-bottom: 2px solid #0e7490; padding-bottom: 5px; margin-bottom: 12px; font-family: sans-serif;">
+                    <h2 style="margin: 0; font-size: 16px; color: #0e7490; font-weight: bold;">WISDOM HOPE FOUNDATION</h2>
+                    <p style="margin: 2px 0 0 0; font-size: 11px; color: #475569;">
+                        Official Receipts Sheet | Total Slips: <b>${currentFilteredRecords.length}</b>
                     </p>
                 </div>
             `;
 
-            currentFilteredRecords.forEach((rec) => {
+            for (const rec of currentFilteredRecords) {
+                drawReceiptOnCanvas(tempCanvas, tempCtx, rec);
+                const imgDataUrl = tempCanvas.toDataURL('image/png');
                 printHtml += `
-                    <div class="print-receipt-card" style="margin-bottom: 5mm;">
-                        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px; margin-bottom: 6px;">
-                            <span style="font-weight: bold; color: #0e7490; font-size: 12px;">Receipt Sr #: ${rec.srNum}</span>
-                            <span style="font-size: 11px; color: #475569;">
-                                Date: <b>${rec.date}</b> | Mode: <b>${rec.payMode}</b> | <b>${rec.donationSource === 'Ads' ? '📢 Ads' : '👤 Personal'}</b>
-                            </span>
-                        </div>
-                        <table style="width: 100%; border-collapse: collapse; font-size: 11px; color: #1e293b;">
-                            <tr>
-                                <td style="width: 15%; color: #64748b; padding: 2px 0;">Donor:</td>
-                                <td style="font-weight: bold; font-size: 12px; padding: 2px 0;">${rec.name}</td>
-                                <td style="text-align: right; font-weight: bold; font-size: 14px; color: #059669; width: 30%;" rowspan="3">
-                                    PKR ${rec.amount.toLocaleString()}/-
-                                </td>
-                            </tr>
-                            <tr>
-                                <td style="color: #64748b; padding: 2px 0;">Address / Ph:</td>
-                                <td style="padding: 2px 0;">${rec.address || 'N/A'} ${rec.contact ? '| ' + rec.contact : ''}</td>
-                            </tr>
-                            <tr>
-                                <td style="color: #64748b; padding: 2px 0;">Purpose:</td>
-                                <td style="padding: 2px 0;">${rec.category || 'General Donation'}</td>
-                            </tr>
-                        </table>
+                    <div class="graphic-receipt-item">
+                        <img src="${imgDataUrl}" />
                     </div>
                 `;
-            });
+            }
 
             printContainer.innerHTML = printHtml;
-            printContainer.classList.remove('hidden');
-
-            window.print();
 
             setTimeout(() => {
-                printContainer.classList.add('hidden');
-                printContainer.innerHTML = "";
+                window.print();
+                setTimeout(() => {
+                    printContainer.classList.add('hidden');
+                    printContainer.innerHTML = "";
+                }, 1000);
             }, 500);
         });
 
