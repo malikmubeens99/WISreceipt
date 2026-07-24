@@ -64,7 +64,7 @@
         <div class="bg-white/20 w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0 shadow-inner">🎉</div>
         <div>
             <h4 class="font-bold text-sm tracking-wide">Action Successful!</h4>
-            <p class="text-xs text-emerald-100 mt-0.5 font-medium">Receipt Generated, Saved & Downloaded.</p>
+            <p class="text-xs text-emerald-100 mt-0.5 font-medium">Receipt Generated & Saved to Cloud.</p>
         </div>
     </div>
 
@@ -147,7 +147,7 @@
                         </label>
                     </div>
 
-                    <div class="pt-2">
+                    <div class="pt-2 space-y-2">
                         <button id="actionProcessBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition duration-200 flex justify-center items-center gap-2 cursor-pointer text-sm">
                             🚀 Generate, Save & Download Image
                         </button>
@@ -159,6 +159,11 @@
                 <h3 class="text-xs font-semibold text-gray-400 mb-2 self-start">Live Dynamic Preview:</h3>
                 <div class="w-full overflow-x-auto text-center">
                     <canvas id="receiptCanvas" class="max-w-full h-auto bg-white border border-gray-300 shadow-xs rounded-xl mx-auto"></canvas>
+                </div>
+                <div class="w-full mt-3 flex gap-2">
+                    <button id="previewSaveBtn" class="flex-1 bg-cyan-700 hover:bg-cyan-800 text-white font-bold py-2.5 px-3 rounded-xl shadow-sm transition text-xs flex justify-center items-center gap-1.5 cursor-pointer">
+                        📱 Save to Photos / Download
+                    </button>
                 </div>
             </div>
         </div>
@@ -241,7 +246,7 @@
                     <canvas id="modalReceiptCanvas" class="max-w-full h-auto bg-white border border-gray-300 shadow-md rounded-xl mx-auto"></canvas>
                 </div>
                 <button id="modalDownloadBtn" class="mt-4 w-full bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold py-2.5 px-4 rounded-lg cursor-pointer">
-                    📥 Download This Image
+                    📱 Save to Photos / Download Image
                 </button>
             </div>
 
@@ -356,7 +361,7 @@
             document.getElementById('autoSrDisplay').innerText = calculatedNext;
         }
 
-        // DRAW RECEIPT ON CANVAS - DATE Y-POSITION UPDATED TO H * 0.125
+        // DRAW RECEIPT ON CANVAS - DATE Y-POSITION AT H * 0.125
         function drawReceiptOnCanvas(targetCanvas, targetCtx, dataObject) {
             const targetW = bgImage.naturalWidth || 1000;
             const targetH = bgImage.naturalHeight || 450;
@@ -386,7 +391,6 @@
             const fontBase = Math.round(H * 0.038); 
             targetCtx.font = `bold ${fontBase}px "Courier Prime", monospace`;
 
-            // DATE ALIGNED ABOVE LINE
             targetCtx.fillText(dataObject.date, W * 0.485, H * 0.125);
             targetCtx.fillText(dataObject.srNum, W * 0.485, H * 0.245);
 
@@ -438,14 +442,37 @@
             }, 3000);
         }
 
-        function directCanvasDownload(targetCanvas, fileName) {
+        // UNIVERSAL DOWNLOAD & IPHONE SAVE TO PHOTOS SYSTEM
+        async function smartSaveOrDownloadCanvas(targetCanvas, fileName) {
+            try {
+                // Convert Canvas to Blob
+                const blob = await new Promise(resolve => targetCanvas.toBlob(resolve, 'image/png'));
+                const file = new File([blob], fileName, { type: 'image/png' });
+
+                // Check if running on iPhone / Mobile with Native Share API
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Receipt Image',
+                        text: 'Wisdom Hope Foundation Receipt'
+                    });
+                    return;
+                }
+            } catch (err) {
+                console.log("Native share fallback to direct download", err);
+            }
+
+            // Fallback for Android/PC Direct Download
             const imgDataUrl = targetCanvas.toDataURL('image/png');
-            const downloadLinkNode = document.createElement('a');
-            downloadLinkNode.href = imgDataUrl;
-            downloadLinkNode.download = fileName;
-            document.body.appendChild(downloadLinkNode);
-            downloadLinkNode.click();
-            document.body.removeChild(downloadLinkNode);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = imgDataUrl;
+            downloadLink.download = fileName;
+            downloadLink.style.display = 'none';
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            setTimeout(() => {
+                document.body.removeChild(downloadLink);
+            }, 200);
         }
 
         document.getElementById('actionProcessBtn').addEventListener('click', () => {
@@ -472,7 +499,9 @@
             set(newRecordRef, transactionPayload).then(() => {
                 drawReceiptOnCanvas(canvas, ctx, transactionPayload);
                 const cleanTitle = nameField.replace(/\s+/g, '_');
-                directCanvasDownload(canvas, `Wisdom_Receipt_Sr_${transactionPayload.srNum}_${cleanTitle}.png`);
+                
+                // Trigger Smart Download / iPhone Share
+                smartSaveOrDownloadCanvas(canvas, `Wisdom_Receipt_Sr_${transactionPayload.srNum}_${cleanTitle}.png`);
                 
                 triggerSuccessToast();
 
@@ -484,6 +513,13 @@
                 
                 drawReceipt();
             }).catch(err => alert("Cloud Synced Error: " + err.message));
+        });
+
+        document.getElementById('previewSaveBtn').addEventListener('click', () => {
+            const nameVal = document.getElementById('inputName').value.trim() || 'Donor';
+            const srVal = document.getElementById('inputSr').value || '1096';
+            const cleanTitle = nameVal.replace(/\s+/g, '_');
+            smartSaveOrDownloadCanvas(canvas, `Wisdom_Receipt_Sr_${srVal}_${cleanTitle}.png`);
         });
 
         function renderRecordsView(filteredArray = null) {
@@ -595,7 +631,7 @@
             renderRecordsView();
         }
 
-        // REAL GRAPHIC IMAGE-BASED PRINT ENGINE
+        // PRINT ENGINE
         document.getElementById('printMonthlyPdfBtn').addEventListener('click', async () => {
             if (currentFilteredRecords.length === 0) {
                 alert('⚠️ Print karne ke liye koi records maujood nahi hain!');
@@ -670,7 +706,7 @@
         document.getElementById('modalDownloadBtn').addEventListener('click', () => {
             if (!currentlySelectedModalRecord) return;
             const cleanTitle = currentlySelectedModalRecord.name.replace(/\s+/g, '_');
-            directCanvasDownload(modalCanvas, `Wisdom_Receipt_Sr_${currentlySelectedModalRecord.srNum}_${cleanTitle}_Log.png`);
+            smartSaveOrDownloadCanvas(modalCanvas, `Wisdom_Receipt_Sr_${currentlySelectedModalRecord.srNum}_${cleanTitle}_Log.png`);
         });
 
         function deleteSingleRecord(id) {
